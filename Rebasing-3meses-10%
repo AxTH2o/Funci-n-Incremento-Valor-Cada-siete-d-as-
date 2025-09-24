@@ -1,0 +1,57 @@
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.7;
+
+import "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
+
+contract RebaseToken3M is AutomationCompatibleInterface {
+    string public name = "RebaseToken3M";
+    string public symbol = "RT3M";
+    uint8 public decimals = 18;
+
+    uint256 public baseTotalSupply = 1_000_000 * 10**18;
+    uint256 public rebaseRate = 110; // +10%
+    uint256 public rebaseInterval = 90 days;
+    uint256 public lastRebase;
+
+    mapping(address => uint256) internal balances;
+    address[] internal holders;
+
+    constructor() {
+        balances[msg.sender] = baseTotalSupply;
+        holders.push(msg.sender);
+        lastRebase = block.timestamp;
+    }
+
+    function balanceOf(address account) public view returns (uint256) {
+        return balances[account];
+    }
+
+    function transfer(address to, uint256 amount) public returns (bool) {
+        require(balances[msg.sender] >= amount, "Insufficient");
+        balances[msg.sender] -= amount;
+        balances[to] += amount;
+        if (!_isHolder(to)) holders.push(to);
+        return true;
+    }
+
+    function _isHolder(address user) internal view returns (bool) {
+        for (uint i = 0; i < holders.length; i++) {
+            if (holders[i] == user) return true;
+        }
+        return false;
+    }
+
+    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory) {
+        upkeepNeeded = block.timestamp >= lastRebase + rebaseInterval;
+    }
+
+    function performUpkeep(bytes calldata) external override {
+        require(block.timestamp >= lastRebase + rebaseInterval, "Too early");
+        for (uint i = 0; i < holders.length; i++) {
+            balances[holders[i]] = (balances[holders[i]] * rebaseRate) / 100;
+        }
+        baseTotalSupply = (baseTotalSupply * rebaseRate) / 100;
+        lastRebase = block.timestamp;
+    }
+}
