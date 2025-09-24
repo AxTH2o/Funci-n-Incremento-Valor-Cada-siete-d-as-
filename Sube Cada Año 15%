@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract SKAUDS is ERC20, Ownable {
+    uint256 public constant INITIAL_SUPPLY = 150_000_000 * 10**18; // 150 million tokens with 18 decimals
+    uint256 public lastValueIncreaseTimestamp;
+
+    constructor() ERC20("SKAUDS", "SCAUD") Ownable(msg.sender) {
+        _mint(msg.sender, INITIAL_SUPPLY);
+        lastValueIncreaseTimestamp = block.timestamp;
+    }
+
+    // Function to mint new tokens, only callable by the owner
+    function mint(address to, uint256 amount) public onlyOwner {
+        _mint(to, amount);
+    }
+
+    // Function to increase token supply by 15% to simulate value increase, callable by owner annually
+    function increaseValue() public onlyOwner {
+        require(block.timestamp >= lastValueIncreaseTimestamp + 365 days, "Can only increase value once per year");
+        
+        uint256 currentSupply = totalSupply();
+        uint256 increaseAmount = (currentSupply * 15) / 100; // 15% of current supply
+        _mint(owner(), increaseAmount);
+        
+        lastValueIncreaseTimestamp = block.timestamp;
+    }
+
+    // Optional: Override decimals if you want a different precision (default is 18)
+    function decimals() public pure override returns (uint8) {
+        return 18;
+    }
+}
