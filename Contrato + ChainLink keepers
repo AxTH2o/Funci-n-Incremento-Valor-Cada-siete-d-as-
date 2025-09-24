@@ -1,0 +1,121 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.7;
+
+import "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
+
+contract AutoRebaseToken is AutomationCompatibleInterface {
+    string public name = "AutoRebaseToken";
+    string public symbol = "ART";
+    uint8 public decimals = 18;
+
+    address public owner;
+    uint256 public baseTotalSupply = 100_000_000 * 10**18;
+    uint256 public rebaseRate = 105;
+    uint256 public rebaseInterval = 7 days;
+    uint256 public lastRebase;
+
+    uint256 public monthlyDropAmount = 10 * 10**18;
+    uint256 public monthlyDropInterval = 30 days;
+    uint256 public lastMonthlyDrop;
+
+    mapping(address => uint256) internal baseBalances;
+    mapping(address => bool) internal initialized;
+    mapping(address => uint256) public lastTransfer;
+
+    address[] internal holders;
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "No autorizado");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+        baseBalances[owner] = baseTotalSupply;
+        holders.push(owner);
+        initialized[owner] = true;
+        lastRebase = block.timestamp;
+        lastMonthlyDrop = block.timestamp;
+        lastTransfer[owner] = block.timestamp;
+    }
+
+    function balanceOf(address account) public view returns (uint256) {
+        return applyRebase(baseBalances[account]);
+    }
+
+    function applyRebase(uint256 baseAmount) internal view returns (uint256) {
+        uint256 cycles = (block.timestamp - lastRebase) / rebaseInterval;
+        for (uint256 i = 0; i < cycles; i++) {
+            baseAmount = (baseAmount * rebaseRate) / 100;
+        }
+        return baseAmount;
+    }
+
+    function transfer(address to, uint256 amount) public returns (bool) {
+        uint256 baseAmount = (amount * 100) / rebaseRate;
+        require(baseBalances[msg.sender] >= baseAmount, "Saldo insuficiente");
+
+        baseBalances[msg.sender] -= baseAmount;
+
+        if (!initialized[to]) {
+            holders.push(to);
+            initialized[to] = true;
+        }
+
+        baseBalances[to] += baseAmount;
+
+        lastTransfer[msg.sender] = block.timestamp;
+        lastTransfer[to] = block.timestamp;
+
+        return true;
+    }
+
+    function mint(address to, uint256 amount) public onlyOwner {
+        if (!initialized[to]) {
+            holders.push(to);
+            initialized[to] = true;
+        }
+
+        baseBalances[to] += amount;
+        baseTotalSupply += amount;
+    }
+
+    function totalSupply() public view returns (uint256) {
+        uint256 total;
+        for (uint256 i = 0; i < holders.length; i++) {
+            total += balanceOf(holders[i]);
+        }
+        return total;
+    }
+
+    // 🛠️ Chainlink Keepers Integration
+
+    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory) {
+        bool needRebase = block.timestamp >= lastRebase + rebaseInterval;
+        bool needDrop = block.timestamp >= lastMonthlyDrop + monthlyDropInterval;
+        upkeepNeeded = needRebase || needDrop;
+    }
+
+    function performUpkeep(bytes calldata) external override {
+        if (block.timestamp >= lastRebase + rebaseInterval) {
+            uint256 cycles = (block.timestamp - lastRebase) / rebaseInterval;
+            for (uint256 i = 0; i < holders.length; i++) {
+                for (uint256 j = 0; j < cycles; j++) {
+                    baseBalances[holders[i]] = (baseBalances[holders[i]] * rebaseRate) / 100;
+                }
+            }
+            lastRebase += cycles * rebaseInterval;
+        }
+
+        if (block.timestamp >= lastMonthlyDrop + monthlyDropInterval) {
+            for (uint256 i = 0; i < holders.length; i++) {
+                address user = holders[i];
+                if (lastTransfer[user] >= block.timestamp - monthlyDropInterval) {
+                    baseBalances[user] += monthlyDropAmount;
+                    baseTotalSupply += monthlyDropAmount;
+                }
+            }
+            lastMonthlyDrop = block.timestamp;
+        }
+    }
+}
