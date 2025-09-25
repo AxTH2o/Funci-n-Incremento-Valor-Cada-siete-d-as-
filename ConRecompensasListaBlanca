@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.7;
+
+import "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
+
+contract WhitelistRebaseToken is AutomationCompatibleInterface {
+    string public name = "WhitelistRebaseToken";
+    string public symbol = "WRT";
+    uint8 public decimals = 18;
+
+    address public owner;
+    uint256 public baseTotalSupply = 1_000_000 * 10**18;
+    uint256 public rebaseRate = 130; // +30%
+    uint256 public rebaseInterval = 365 days;
+    uint256 public lastRebase;
+
+    uint256 public monthlyDropAmount = 10 * 10**18;
+    uint256 public monthlyDropInterval = 30 days;
+    uint256 public lastMonthlyDrop;
+
+    mapping(address => uint256) internal balances;
+    mapping(address => bool) public isWhitelisted;
+    address[] internal holders;
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "No autorizado");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+        balances[owner] = baseTotalSupply;
+        holders.push(owner);
+        isWhitelisted[owner] = true;
+        lastRebase = block.timestamp;
+        lastMonthlyDrop = block.timestamp;
+    }
+
+    function balanceOf(address account) public view returns (uint256) {
+        return balances[account];
+    }
+
+    function transfer(address to, uint256 amount) public returns (bool) {
+        require(balances[msg.sender] >= amount, "Saldo insuficiente");
+        balances[msg.sender] -= amount;
+        balances[to] += amount;
+
+        if (!_isHolder(to)) holders.push(to);
+        return true;
+    }
+
+    function _isHolder(address user) internal view returns (bool) {
+        for (uint i = 0; i < holders.length; i++) {
+            if (holders[i] == user) return true;
+        }
+        return false;
+    }
+
+    function addToWhitelist(AQUI LISTA DE WALLETS SOCIOS APORTAN $£€¥¢) public onlyOwner {
+        isWhitelisted[user] = true;
+        if (!_isHolder(user)) holders.push(user);
+    }
+
+    function removeFromWhitelist(address user) public onlyOwner {
+        isWhitelisted[user] = false;
+    }
+
+    function mint(address to, uint256 amount) public onlyOwner {
+        balances[to] += amount;
+        baseTotalSupply += amount;
+        if (!_isHolder(to)) holders.push(to);
+    }
+
+    function totalSupply() public view returns (uint256) {
+        uint256 total;
+        for (uint i = 0; i < holders.length; i++) {
+            total += balances[holders[i]];
+        }
+        return total;
+    }
+
+    // 🛠️ Chainlink Keepers Integration
+
+    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory) {
+        bool needRebase = block.timestamp >= lastRebase + rebaseInterval;
+        bool needDrop = block.timestamp >= lastMonthlyDrop + monthlyDropInterval;
+        upkeepNeeded = needRebase || needDrop;
+    }
+
+    function performUpkeep(bytes calldata) external override {
+        if (block.timestamp >= lastRebase + rebaseInterval) {
+            for (uint i = 0; i < holders.length; i++) {
+                balances[holders[i]] = (balances[holders[i]] * rebaseRate) / 100;
+            }
+            baseTotalSupply = (baseTotalSupply * rebaseRate) / 100;
+            lastRebase = block.timestamp;
+        }
+
+        if (block.timestamp >= lastMonthlyDrop + monthlyDropInterval) {
+            for (uint i = 0; i < holders.length; i++) {
+                address user = holders[i];
+                if (isWhitelisted[user]) {
+                    balances[user] += monthlyDropAmount;
+                    baseTotalSupply += monthlyDropAmount;
+                }
+            }
+            lastMonthlyDrop = block.timestamp;
+        }
+    }
+}
