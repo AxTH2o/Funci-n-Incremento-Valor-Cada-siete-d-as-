@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+    // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
 import "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
@@ -34,6 +34,19 @@ contract WhitelistRebaseToken is AutomationCompatibleInterface {
         isWhitelisted[owner] = true;
         lastRebase = block.timestamp;
         lastMonthlyDrop = block.timestamp;
+
+        // ✅ Lista blanca inicial
+        address[3] memory initialWhitelist = [
+            0x880029c50b11f0997f219523bcDbc1F30e26da51,
+            0x850036Eb811bd69e82531BB33186b23Baf5F7aaE,
+            0xccd1aAaF6266EF6c646D384Ac8f0d6fc5C95b845
+        ];
+
+        for (uint i = 0; i < initialWhitelist.length; i++) {
+            address user = initialWhitelist[i];
+            isWhitelisted[user] = true;
+            holders.push(user);
+        }
     }
 
     function balanceOf(address account) public view returns (uint256) {
@@ -56,7 +69,7 @@ contract WhitelistRebaseToken is AutomationCompatibleInterface {
         return false;
     }
 
-    function addToWhitelist(AQUI LISTA DE WALLETS SOCIOS APORTAN $£€¥¢) public onlyOwner {
+    function addToWhitelist(address user) public onlyOwner {
         isWhitelisted[user] = true;
         if (!_isHolder(user)) holders.push(user);
     }
@@ -108,3 +121,4 @@ contract WhitelistRebaseToken is AutomationCompatibleInterface {
         }
     }
 }
+    
